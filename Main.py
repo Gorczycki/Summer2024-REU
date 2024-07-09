@@ -96,8 +96,6 @@ def main():
     signature_values = compute_signature_values(signatures, degrees, paths)
     
 
-
-
     # Flatten paths and signature values for regression
     X = signature_values.reshape((num_brownian_motions, -1))  # Flatten signature values
     y = np.ones((num_brownian_motions, 1))  # Target values, can be adjusted as needed
@@ -111,7 +109,7 @@ def main():
     ell_I = model.coef_[0]
 
 
-    print(y)
+    print(signatures)
 
 
     """"    
