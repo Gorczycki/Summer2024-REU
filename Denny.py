@@ -47,7 +47,7 @@ def get_QV_price_Heston(S,B,sigma,days,hours,minutes):
     S_daily=np.array([S[hours*minutes*k] for k in range(days)])
     B_daily=np.array([B[hours*minutes*k] for k in range(days)])
 
-    QV_real_price=sigma*(S_daily)**2
+    QV_real_price=(sigma**2)*(S_daily)**2
     time_days=np.array(range(days))
     time_days=time_days/len(time_days)
 
