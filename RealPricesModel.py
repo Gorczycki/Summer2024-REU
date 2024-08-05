@@ -29,7 +29,7 @@ def get_BM_price(S, QV_hat_price, time_days):
     B_daily_ext = np.cumsum(new_increments_BM)
     B_daily_ext = np.insert(B_daily_ext, 0, 0)
 
-    s = figure(width=500, height=350, title='Compare Brownian motions')
+    s = figure(width=500, height=350, title='Underlying Brownian motion')
     s.line(time_days, B_daily_ext[1:], legend_label='Estimated BM', line_color='tomato')
 
     return B_daily_ext, s
