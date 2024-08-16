@@ -22,13 +22,14 @@ def implied_vol_minimize(price, S0, K, T, r, payoff="call", disp=True):
     """ Returns Implied volatility by minimization"""
 
     n = 2  # must be even
-    print(T)
     T = T/365
-    print("TEST",T)
+    S0 = S0
+    K = K
+
     def obj_fun(vol):
         return (BlackScholes(True, S0, K, T, r, 0., vol) - price) ** n
 
-    res = minimize_scalar(obj_fun, bounds=(1e-15, 8), method='bounded')
+    res = minimize_scalar(obj_fun, bounds=(1e-8, 8), method='bounded')
     if res.success == True:
         return res.x
     if disp == True:
@@ -60,8 +61,14 @@ def phi(x):  ## Gaussian density
 
 #### Black Sholes Vega
 def BlackScholesVegaCore(DF, F, X, T, v):  # S=F*DF
+    T = T/365
+    #F = F/100
+    #X=X/100
+    print("vega check", DF, F, X, T, v)
     vsqrt = v * np.sqrt(T)
-    d1 = (np.log(F / X) + (vsqrt * vsqrt / 2.)) / vsqrt
+    d1 = (np.log(F/X) + (vsqrt * vsqrt / 2.)) / vsqrt
+    print("d1:",d1)
+    print("vega:",F * phi(d1) * np.sqrt(T))
     return F * phi(d1) * np.sqrt(T) / DF
 
 
@@ -71,7 +78,7 @@ def BlackScholesCore(CallPutFlag, DF, F, X, T, v):
     ## F: Forward
     ## X: strike
     vsqrt = v * np.sqrt(T)
-    d1 = (np.log(F / X) + (vsqrt * vsqrt / 2.)) / vsqrt
+    d1 = (np.log((F / X)) + (vsqrt * vsqrt / 2.)) / vsqrt
     d2 = d1 - vsqrt
     if CallPutFlag:
         return DF * (F *norm.cdf(d1) - X * norm.cdf(d2))
@@ -124,17 +131,17 @@ def from_tilde_to_strings_new(tilde):
 def get_tilde_df_debug(Sig_data_frame, new_tilde, keys_n, keys_n1, comp_of_path, rho, y):
     aus_B = []
     y = [[eval(key)] if isinstance(eval(key), int) else list(eval(key)) for key in keys_n]
-
     for k in range(len(y)):
         if k == 0:
             aus_B.insert(0, Sig_data_frame['(2)'])
         if (k > 0 and y[k][-1] == 1):
-            aus_B.append(Sig_data_frame[new_tilde[k - 1][0]])
+            aus_B.append(Sig_data_frame[new_tilde[k-1][0]])
 
         if (k > 0 and y[k][-1] == 2):
             aus_B.append(Sig_data_frame[new_tilde[k - 1][0]] - 0.5 * Sig_data_frame[new_tilde[k - 1][2]])
 
         if (k > 0 and y[k][-1] == 3):
+
             aus_B.append(Sig_data_frame[new_tilde[k - 1][0]] - rho * 0.5 * Sig_data_frame[new_tilde[k - 1][2]])
 
     new_keys_B = [keys_n1[k] + str('~B') for k in range(len(y))]
@@ -161,6 +168,7 @@ def correlated_bms_correct(N, rho, t_final, t_0):
 "[31.04, 60.04, 93.04, 172.00, 354, 599.00, 781.04]"
 maturities = np.array([30,60,99,179,361,515,879])
 strikes = np.array([3300,3500,3700,3900,4100,4300,4500,4700,4900])
+
 #strikes = np.array([.8,.85,.9,.95,1,1.05,1.1,1.15,1.2])
 iv_market=np.load('iv_data.npy')
 market_prices=np.load('optionprice.npy')
@@ -189,10 +197,12 @@ ax.set_title('Implied Volatility Surface for SPX Options')
 
 
 
-
+vega = np.load('vega.npy', allow_pickle=True)
+print(vega)
 
 def get_vegas(maturities, strikes, initial_price, iv_market, flag_truncation):
     vega=[]
+
     for i in range(len(maturities)):
         for j in range(len(strikes[i])):
             if flag_truncation==True:
@@ -207,9 +217,10 @@ def get_vegas(maturities, strikes, initial_price, iv_market, flag_truncation):
     flat_normal_weights=normalized_vega.flatten()
     return flat_normal_weights, normalized_vega
 
-initial_price=4554.96
+initial_price=4114.96
 strikes_all=duplicate(strikes,len(maturities))
 strikes=np.array([np.array(strikes_all[j*(len(strikes)):(j+1)*(len(strikes))]) for j in range(len(maturities))])
+print(strikes)
 maturities_ext=multi_maturities(maturities,len(strikes[0]))
 strike_flat=strikes.flatten()
 option_prices_splitted=np.array(np.split(market_prices,len(maturities)))
@@ -217,7 +228,7 @@ option_prices_splitted=np.array(np.split(market_prices,len(maturities)))
 flag_truncation=False #Truncation was introduced by Cont and Ben Hamida (2011)
 flat_normal_weights, norm_vegas=get_vegas(maturities, strikes, initial_price, iv_market, flag_truncation)
 
-MC_number, rho, n= 100, -0.5, 2
+MC_number, rho, n= 1000, -0.5, 2
 rho_matrix=[[1,rho],[rho,1]]
 d,D=2,1
 grid=np.array([int(T) for T in maturities])
@@ -226,27 +237,19 @@ maturity_dict=dict(zip(maturities, grid.T))
 nbr_components=len(rho_matrix)+1
 keys_n1=esig.sigkeys(nbr_components,n+1).strip().split(" ")
 keys_n=esig.sigkeys(nbr_components,n).strip().split(" ")
+
 y=[[eval(key)] if isinstance(eval(key), int) else list(eval(key)) for key in keys_n]
 first_step=e_tilde_part2_new(y)
 new_tilde=from_tilde_to_strings_new(first_step)
 
 
-
 def auxiliar_function(idx_mat,n,nbr_components,keys_n1,keys_n,new_tilde,maturity_dict):
-    time_and_bms=correlated_bms_correct(maturity_dict[maturities[idx_mat]],rho,maturities[idx_mat],0)
-    augmented_bms=col_stack(time_and_bms)
+    time_and_bms = correlated_bms_correct(maturity_dict[maturities[idx_mat]], rho, maturities[idx_mat], 0)
+    augmented_bms = col_stack(time_and_bms)
     S = np.array([1])
-    sig_df = pd.DataFrame(columns=keys_n)
-    sig_df.loc[0] = [0] * len(keys_n)
-    for i in range(1,maturities[idx_mat]):
-        augmented_bms_run = augmented_bms[:i]
-        sig = iisignature.sig(augmented_bms_run, n+1)
-        sig = np.hstack((S, sig))
-        temp_df = pd.DataFrame([sig], columns=keys_n1)
-        sig_df = pd.concat([temp_df, sig_df], ignore_index=True)
-
-    sig_df = sig_df.iloc[::-1].reset_index(drop=True)
-
+    sig = iisignature.sig(augmented_bms, n+1)
+    sig = np.hstack((S, sig))
+    sig_df = pd.DataFrame([sig], columns=keys_n1)
     tilde_sig_df=get_tilde_df_debug(sig_df,new_tilde,keys_n,keys_n1,nbr_components,rho,y)
     tilde_sig_df_by_mat=np.array(tilde_sig_df.iloc[-1,:])
 
@@ -259,58 +262,64 @@ def auxiliar_function_all_mat(n,nbr_components,keys_n1,keys_n,new_tilde,maturity
 
 get_model=auxiliar_function_all_mat(n,nbr_components,keys_n1,keys_n,new_tilde,maturity_dict)
 arr_dfs_bymat=np.array(Parallel(n_jobs=-1)(delayed(auxiliar_function_all_mat)(n,nbr_components,keys_n1,keys_n,new_tilde,maturity_dict) for k in tqdm(range(MC_number),desc='Getting Model at all maturities')))
-
+arr_dfs_bymat=np.swapaxes(arr_dfs_bymat,0,1)
+print(arr_dfs_bymat.shape)
 prices_scaled=option_prices_splitted
 Premium = prices_scaled.flatten()
 
 index_sel_maturities=[0,1]
 sel_maturities=[maturities[0],maturities[1]]
 Vega_W=np.array([np.split(flat_normal_weights,len(maturities))[idx] for idx in index_sel_maturities]).flatten()
+
+
 Premium1=np.array([np.split(prices_scaled,len(maturities))[idx] for idx in index_sel_maturities]).flatten()
+print('---')
 print(Premium1)
 
-def obj_MC_tensor(l):
-    tensor_sigsde_at_mat = np.tensordot(arr_dfs_bymat, l, axes=1) + initial_price  # veloce
 
-    # this part computes the monte carlo prices of the calls ---> output: mc_payoff_arr (quite fast)
-    pay = []
-    for K in strikes[0]:
-        matrix_big = []
-        for j in range(len(maturities)):
-            payff = np.maximum(0, tensor_sigsde_at_mat[j] - K)
-            matrix_big.append(payff)
-        matrix = np.array(matrix_big)
-        pay.append(np.mean(matrix, axis=1))
-    mc_payoff_arr = np.array(pay).transpose().flatten()
-
-    return np.sqrt(flat_normal_weights) * (mc_payoff_arr - Premium)
 
 def get_mc_sel_mat_tensor(l):
     '''
     Input: l (np.array): a set of parameters of the model, mind the dimension
     Output: Monte Carlo prices of the model with parameters l for the selected maturities
     '''
-
-    tensor_sigsde_at_mat=np.tensordot(arr_dfs_bymat,l,axes=1)+initial_price
-    pay=[]
+    tensor_sigsde_at_mat = np.tensordot(arr_dfs_bymat, l, axes=1) + initial_price
+    pay = []
     for K in strikes[0]:
-        matrix_big=[]
+        matrix_big = []
         for j in index_sel_maturities:
-            payff=np.maximum(0, tensor_sigsde_at_mat[j] - K)
+            payff = np.maximum(0, tensor_sigsde_at_mat[j] - K)
             matrix_big.append(payff)
-        matrix=np.array(matrix_big)
-        pay.append(np.mean(matrix,axis=1))
-    mc_payoff_arr=np.array(pay).transpose().flatten()
+        matrix = np.array(matrix_big)
+        pay.append(np.mean(matrix, axis=1))
+
+    mc_payoff_arr = np.array(pay).transpose().flatten()
     return mc_payoff_arr
 
-#range(len(sel_maturities))
+
+
+def obj_MC_tensor_selected_mat(l):
+    mc_payoff_arr=get_mc_sel_mat_tensor(l)
+    return np.sqrt(Vega_W)*(mc_payoff_arr-Premium1)**2
+
+best_result = None
+for t in tqdm(range(1)):
+    l_initial = np.random.uniform(-0.1, 0.1, int(((d + 1) ** (n + 1) - 1) * D / d))
+    res1 = least_squares(obj_MC_tensor_selected_mat, l_initial, loss='linear', max_nfev=5000)
+    #res1 = least_squares(obj_MC_tensor_selected_mat, l_initial,loss='linear')
+
+
+    if best_result is None or res1.cost < best_result.cost:
+        best_result = res1
+
+print("Best result:", best_result)
+calibrated_prices=get_mc_sel_mat_tensor(res1['x'])
 
 def get_iv_from_calib(calibrated_prices, strikes, maturities):
     sig_prices_mc_arr = []
     iv_calib_mc = []
 
     sig_prices_mc_arr = np.array(np.split(calibrated_prices, len(maturities)))
-    print(sig_prices_mc_arr)
     for j in range(len(maturities)):
         for k in range(len(strikes[j])):
             iv_calib_mc.append(
@@ -319,28 +328,15 @@ def get_iv_from_calib(calibrated_prices, strikes, maturities):
 
     iv_calib_arr_mc = np.array(
         [np.array(iv_calib_mc[k * len(strikes[0]):(k + 1) * len(strikes[0])]) for k in range(len(maturities))])
+
     return iv_calib_arr_mc, sig_prices_mc_arr
-
-l_initial=np.random.uniform(-0.1,0.1,int(((d+1)**(n+1)-1)*D/d))
-
-def obj_MC_tensor_selected_mat(l):
-    mc_payoff_arr=get_mc_sel_mat_tensor(l)
-    return np.sqrt(Vega_W)*(mc_payoff_arr-Premium1)
-
-
-n=2
-for t in tqdm(range(1)):
-    l_initial=np.random.uniform(-0.2,0.2,int(((d+1)**(n+1)-1)*D/d))
-    res1 = least_squares(obj_MC_tensor_selected_mat, l_initial,loss='linear')
-
-calibrated_prices=get_mc_sel_mat_tensor(res1['x'])
-
-
 
 np.save(f'ell_MC({n},{d},{rho},{MC_number},{initial_price}).npy',res1['x'])
 
 ell_MC = res1['x']
-
+print(ell_MC)
+print('---')
+print(calibrated_prices)
 iv_, prices_= get_iv_from_calib(calibrated_prices,strikes,sel_maturities)
 np.save(f'calibrated_prices_MC({MC_number},{initial_price})',calibrated_prices)
 
@@ -348,8 +344,8 @@ np.save(f'calibrated_prices_MC({MC_number},{initial_price})',calibrated_prices)
 calibrated_prices_02 = calibrated_prices
 ell_calibrated_02 = ell_MC
 iv_calib_arr_mc_2, sig_prices_mc_arr_2 = get_iv_from_calib(calibrated_prices_02, strikes, sel_maturities)
-print(iv_calib_arr_mc_2)
-
+print(iv_calib_arr_mc_2[0])
+print(iv_market[0])
 
 for j in range(len(sel_maturities)):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
@@ -365,5 +361,6 @@ for j in range(len(sel_maturities)):
     ax2.set_title('Absolute Error in Basepoints')
     ax1.legend(loc='upper right')
     ax2.legend(loc='upper left')
-    #plt.savefig('Fit_MC_(T={}'.format(round(maturities[j], 4)) + ', all).png', dpi=100)
+    plt.savefig('Fit_MC_2T2(T={}'.format(round(maturities[j], 4)) + ', all).png', dpi=100)
     plt.show()
+
